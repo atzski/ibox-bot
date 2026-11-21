@@ -1,0 +1,45 @@
+name: iBox bot
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: ibox-bot
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Status, releases and catalog
+        run: node bot.mjs
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          STATUS_CHANNEL: '1573491759206367332'
+          RELEASES_CHANNEL: '1573491757511872642'
+          CATALOG_CHANNEL: '1573491765258879078'
+
+      # GitHub pauses scheduled workflows after 60 days without a commit.
+      - name: Keep the schedule alive
+        if: always()
+        run: |
+          last=$(git log -1 --format=%ct)
+          if [ $(( $(date +%s) - last )) -gt 4320000 ]; then
+            git config user.name atzski
+            git config user.email atzski@users.noreply.github.com
+            git commit --allow-empty -m "Keep the schedule alive"
+            git push
+          fi
