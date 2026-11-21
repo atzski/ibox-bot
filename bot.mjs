@@ -11,6 +11,8 @@ const CHANNELS = {
 const INETBOX = process.env.INETBOX_URL || 'https://inetbox-server.onrender.com';
 const REPO = process.env.IBOX_REPO || 'atzski/ibox';
 const SITE = 'https://atzski.github.io/ibox/en.html';
+const STATUS_MARKER = 'iNetbox status';
+const ONLINE = 'iNetbox is online';
 const COLOR = { up: 0x22c55e, down: 0xef4444, ibox: 0xe5534b, catalog: 0x8b5cf6 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -52,7 +54,8 @@ async function github(path) {
 
 async function probe() {
   let error = 'unknown error';
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  const tries = Number(process.env.HEALTH_TRIES) || 3;
+  for (let attempt = 1; attempt <= tries; attempt++) {
     const t0 = Date.now();
     try {
       const res = await fetch(`${INETBOX}/health`, { signal: AbortSignal.timeout(60_000), headers: { 'User-Agent': 'ibox-bot' } });
@@ -65,7 +68,7 @@ async function probe() {
       error = e.name === 'TimeoutError' ? 'no response after 60 seconds' : e.message;
     }
     console.log(`health attempt ${attempt} failed: ${error}`);
-    if (attempt < 3) await sleep(20_000);
+    if (attempt < tries) await sleep(20_000);
   }
   return { up: false, error };
 }
@@ -81,9 +84,9 @@ function statusEmbed(state, since) {
   const checked = `Last check: <t:${now()}:R>`;
   if (state.up) {
     return {
-      title: 'iNetbox is online',
+      author: { name: STATUS_MARKER },
       color: COLOR.up,
-      description: `All online features of iBox are available.\n${checked}`,
+      description: `# 🟢 ${ONLINE}\nAll online features of iBox are available.\n${checked}`,
       fields: [
         { name: 'Server version', value: state.version || 'unknown', inline: true },
         { name: 'Response time', value: `${state.ms} ms`, inline: true },
@@ -94,9 +97,10 @@ function statusEmbed(state, since) {
     };
   }
   return {
-    title: 'iNetbox is offline',
+    author: { name: STATUS_MARKER },
     color: COLOR.down,
     description:
+      `# 🔴 iNetbox is offline\n` +
       'The server is not responding. Accounts, friends, chat, shares and the catalog are unavailable for now. ' +
       `Your local library still works.\n${checked}`,
     fields: [
@@ -114,9 +118,10 @@ async function updateStatus(me) {
   console.log('iNetbox', state.up ? `up ${state.version} ${state.ms} ms` : `down: ${state.error}`);
 
   const pins = await discord('GET', `/channels/${ch}/pins`);
-  const pinned = pins.find((m) => m.author.id === me.id && m.embeds?.[0]?.title?.startsWith('iNetbox is'));
+  const isStatus = (e) => e && (e.author?.name === STATUS_MARKER || e.title?.startsWith('iNetbox is'));
+  const pinned = pins.find((m) => m.author.id === me.id && isStatus(m.embeds?.[0]));
   const prev = pinned?.embeds[0];
-  const prevUp = prev ? prev.title === 'iNetbox is online' : null;
+  const prevUp = prev ? `${prev.title || ''} ${prev.description || ''}`.includes(ONLINE) : null;
   const prevSince = prev?.timestamp ? Math.floor(Date.parse(prev.timestamp) / 1000) : now();
   const changed = prevUp !== null && prevUp !== state.up;
   const since = prevUp === state.up ? prevSince : now();
