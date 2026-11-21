@@ -150,7 +150,7 @@ async function updateStatus(me) {
 
 function releaseNotes(body) {
   const sections = (body || '').split(/^## /m);
-  const news = sections.find((s) => /^(Nouveautés|What's new)/i.test(s));
+  const news = sections.find((s) => /^What's new/i.test(s)) || sections.find((s) => /^Nouveautés/i.test(s));
   const text = (news ? news.replace(/^[^\n]*\n/, '') : body || '').trim();
   return text.length > 3500 ? text.slice(0, 3500).replace(/\s+\S*$/, '') + ' ...' : text;
 }
